@@ -23,6 +23,8 @@ export function registerCodeMode(
 
     const executeTool = createExecuteTool({
         prefix: "unichem",
+        // Verifiable provenance: unichem_execute results carry a _meta.citation.
+        source: { id: "unichem", name: "UniChem", url: "https://www.ebi.ac.uk/unichem", license: "CC0 1.0" },
         catalog: unichemCatalog,
         apiFetch,
         doNamespace: env.UNICHEM_DATA_DO,

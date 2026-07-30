@@ -55,7 +55,7 @@ assertContains('src/tools/get-schema.ts', getSchemaContent, 'unichem_get_schema'
 
 const indexContent = readFile('src/index.ts');
 assertContains('src/index.ts', indexContent, 'UnichemDataDO', 'index.ts exports UnichemDataDO');
-assertContains('src/index.ts', indexContent, 'McpAgent', 'index.ts uses McpAgent');
+assertContains('src/index.ts', indexContent, 'StatelessMcpWorker', 'index.ts uses StatelessMcpWorker');
 assertContains('src/index.ts', indexContent, 'UNICHEM_DATA_DO', 'index.ts references UNICHEM_DATA_DO binding');
 
 const catalogContent = readFile('src/spec/catalog.ts');

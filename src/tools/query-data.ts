@@ -1,3 +1,4 @@
+import { unichemResponse } from "../lib/tool-result";
 import type { McpServer } from "@bio-mcp/shared/mcp";
 import { z } from "zod";
 import { createQueryDataHandler } from "@bio-mcp/shared/staging/utils";
@@ -9,8 +10,8 @@ interface QueryEnv {
 export function registerQueryData(server: McpServer, env?: QueryEnv): void {
     const handler = createQueryDataHandler("UNICHEM_DATA_DO", "unichem");
 
-    server.registerTool(
-        "unichem_query_data",
+    for (const name of ["unichem_query_data", "mcp_unichem_query_data"]) server.registerTool(
+        name,
         {
             title: "Query Staged UniChem Data",
             description:
@@ -23,7 +24,7 @@ export function registerQueryData(server: McpServer, env?: QueryEnv): void {
         },
         async (args, extra) => {
             const runtimeEnv = env || (extra as { env?: QueryEnv })?.env || {};
-            return handler(args as Record<string, unknown>, runtimeEnv as Record<string, unknown>);
+            return unichemResponse(() => handler(args as Record<string, unknown>, runtimeEnv as Record<string, unknown>), runtimeEnv, name, extra, args);
         },
     );
 }

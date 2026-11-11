@@ -5,29 +5,32 @@ export const unichemCatalog: ApiCatalog = {
     baseUrl: "https://www.ebi.ac.uk/unichem/api/v1",
     version: "v1",
     auth: "none",
-    endpointCount: 6,
+    endpointCount: 8,
     notes:
         "Complements BioThings MyChem — MyChem covers 5 sources (ChEMBL, DrugBank, PubChem, UNII, ChEBI). " +
         "Use UniChem when you need cross-refs to KEGG Compound, HMDB, ZINC, GtoPdb ligands, BindingDB, SureChEMBL, or DrugCentral.\n" +
-        "- UniChem is EBI's cross-reference service for small molecules, spanning 40+ source databases.\n" +
-        "- IMPORTANT quirk: every collection GET path REQUIRES a trailing slash (308 redirect otherwise, verified 2026-04-20). The api-adapter normalizes this automatically, but preserve trailing slashes in any explicit path you pass.\n" +
+        "- UniChem is EBI's cross-reference service for small molecules. Discover current source coverage using /sources/.\n" +
+        "- GET /sources/ uses a trailing slash, while GET /sources/{src_id} must omit it (a trailing slash returns 404). The adapter normalizes both supported spellings.\n" +
         "- POST endpoints (/compounds, /connectivity) do NOT use trailing slashes.\n" +
         "- /compounds (POST) returns cross-refs for a compound across ALL source DBs. Body: { type: 'inchikey'|'inchi'|'sourceID', compound: '<identifier>', sourceID?: <int> }.\n" +
-        "- /connectivity (POST) is targeted: supply `targetSourceIDs: [<int>, ...]` in the body to get cross-refs for only specific source DBs.\n" +
-        "- Look up source IDs via GET /sources/ (tiny, cacheable) — each source has { sourceID, nameShort, nameLong, baseIdUrl }.\n" +
+        "- Current /connectivity responses contain searchedCompound plus sources[] assignment/comparison records; totalCompounds counts candidate structures while totalSources counts assignments. Individual candidate UCIs/full structures may be absent. Preserve this native shape; never equate it with /compounds[].\n" +
+        "- /connectivity (POST) broadens structure matching by connectivity; searchComponents selects component matching. Hits are candidates, not proof of exact identity.\n" +
+        "- Look up source IDs via GET /sources/: fields include sourceID, name, nameLong, baseIdUrl, srcLastUpdated and lastChecked. Source dates do not pin target dataset releases.\n" +
+        "- POST /mappings/evidence is a local helper: explicit mode, full native records, observed source catalog and response hashes; no inferred identity or completeness. Preserve multiple assignments.\n" +
+        "- Legacy InChI/InChIKey GET paths are local aliases for POST /compounds. Batch lookups are not a documented native API; use provider mapping downloads for bulk work.\n" +
         "- InChIKey lookups: supply the full standard InChIKey (27-char with two dashes, e.g. BSYNRYMUTXBXSQ-UHFFFAOYSA-N for aspirin).",
     endpoints: [
         {
             method: "GET",
             path: "/sources/",
             summary:
-                "List every UniChem source database (40+): sourceID, nameShort (e.g. 'chembl', 'pubchem', 'kegg_ligand', 'hmdb', 'zinc', 'gtopdb', 'bindingdb', 'surechembl', 'drugcentral', 'drugbank', 'chebi', 'unii'), nameLong, baseIdUrl. Tiny response, cache-worthy.",
+                "Discover the current source catalog: sourceID, name, nameLong, baseIdUrl and native update/check dates. Preserve retrieval time; availability changes independently per source.",
             category: "sources",
             coveredByTool: "unichem_search",
         },
         {
             method: "GET",
-            path: "/sources/{src_id}/",
+            path: "/sources/{src_id}",
             summary: "Metadata for one source database, keyed by integer sourceID (see GET /sources/).",
             category: "sources",
             pathParams: [
@@ -39,6 +42,11 @@ export const unichemCatalog: ApiCatalog = {
                 },
             ],
             coveredByTool: "unichem_search",
+        },
+        {
+            method: "GET", path: "/sources/{src_id}/", category: "sources",
+            summary: "Local compatibility alias for source metadata; routes upstream to /sources/{src_id} without the slash.",
+            pathParams: [{name:"src_id",type:"number",required:true,description:"Numeric source database ID from /sources/"}],
         },
         {
             method: "POST",
@@ -59,21 +67,21 @@ export const unichemCatalog: ApiCatalog = {
             method: "POST",
             path: "/connectivity",
             summary:
-                "Targeted cross-reference lookup: return cross-refs for a compound only in the specified target source DBs. Body: { compound: '<identifier>', type: 'inchikey'|'inchi'|'sourceID', sourceID?: <int>, targetSourceIDs: [<int>, ...] }.",
+                "Connectivity-based compound candidates. Body: { compound: '<identifier>', type: 'inchikey'|'inchi'|'sourceID'|'uci', sourceID?: <int>, searchComponents?: <boolean> }. Retain full structures before considering identity joins.",
             category: "connectivity",
             body: {
                 contentType: "application/json",
                 description:
-                    "JSON body with targetSourceIDs. Example: { \"compound\": \"BSYNRYMUTXBXSQ-UHFFFAOYSA-N\", \"type\": \"inchikey\", \"targetSourceIDs\": [1, 22, 6] } — returns cross-refs only in ChEMBL, PubChem, and KEGG.",
+                    "JSON body. searchComponents=false searches whole-structure connectivity; true also permits component matching. This changes match semantics, not merely output-source filtering.",
             },
             example:
-                "await api.post('/connectivity', { compound: 'BSYNRYMUTXBXSQ-UHFFFAOYSA-N', type: 'inchikey', targetSourceIDs: [1, 22, 6] })",
+                "await api.post('/connectivity', { compound: 'BSYNRYMUTXBXSQ-UHFFFAOYSA-N', type: 'inchikey', searchComponents: false })",
             coveredByTool: "unichem_execute",
         },
         {
             method: "GET",
             path: "/inchi-key/{inchi_key}/",
-            summary: "Look up a compound by its full standard InChIKey. Returns cross-references across UniChem sources.",
+            summary: "Local compatibility alias: look up a full InChIKey through native POST /compounds. Returns the native cross-reference response.",
             category: "inchi",
             pathParams: [
                 {
@@ -89,7 +97,7 @@ export const unichemCatalog: ApiCatalog = {
         {
             method: "GET",
             path: "/inchi/{standard_inchi}/",
-            summary: "Look up a compound by its standard InChI string. Returns cross-references across UniChem sources.",
+            summary: "Local compatibility alias: look up a Standard InChI through native POST /compounds. URL-encode the identifier.",
             category: "inchi",
             pathParams: [
                 {
@@ -103,6 +111,18 @@ export const unichemCatalog: ApiCatalog = {
             example:
                 "await api.get('/inchi/' + encodeURIComponent('InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)') + '/')",
             coveredByTool: "unichem_search",
+        },
+        {
+            method: "POST",
+            path: "/mappings/evidence",
+            summary: "Local provenance-preserving compound mapping: explicit exact or connectivity mode, complete native assignments, source catalog, observation time and response SHA-256 hashes. Independent identity and completeness remain unverified.",
+            category: "evidence",
+            body: {
+                contentType: "application/json",
+                description: "Required mode: exact|connectivity, type: inchikey|inchi|sourceID|uci, compound: string. sourceID is required only for sourceID input. Boolean searchComponents is allowed only for connectivity (default false).",
+            },
+            example: "await api.post('/mappings/evidence', {mode: 'exact', type: 'inchikey', compound: 'BSYNRYMUTXBXSQ-UHFFFAOYSA-N'})",
+            coveredByTool: "unichem_execute",
         },
     ],
 };

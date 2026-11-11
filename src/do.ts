@@ -1,7 +1,28 @@
 import { RestStagingDO } from "@bio-mcp/shared/staging/rest-staging-do";
 import type { SchemaHints } from "@bio-mcp/shared/staging/schema-inference";
 
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+
 export class UnichemDataDO extends RestStagingDO {
+    protected getTabularData(value: unknown): unknown {
+        const data = record(value) && Array.isArray(value.content) && record(value.structuredContent) && "data" in value.structuredContent
+            ? value.structuredContent.data : value;
+        // Preserve selected SQL _rowid values beneath a distinct column prefix.
+        if (record(data) && typeof data.sql === "string" && Array.isArray(data.rows)) return {query_rows:data.rows.map(native => ({native}))};
+        if (record(data) && record(data._unichem) && record(data.native)) {
+            const native = data.native;
+            const catalog = record(data.source_catalog) ? data.source_catalog.sources : undefined;
+            return {
+                ...(Array.isArray(native.compounds) ? {compounds:native.compounds} : {}),
+                ...(Array.isArray(native.sources) ? {connectivity_assignments:native.sources} : {}),
+                ...(Array.isArray(native.inchis) ? {connectivity_inchis:native.inchis} : {}),
+                ...(record(native.searchedCompound) ? {searched_compound:[native.searchedCompound]} : {}),
+                ...(Array.isArray(catalog) ? {source_catalog:catalog} : {}),
+            };
+        }
+        return data;
+    }
+
     protected getSchemaHints(data: unknown): SchemaHints | undefined {
         if (!data || typeof data !== "object") return undefined;
 

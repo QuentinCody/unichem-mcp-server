@@ -10,9 +10,8 @@ export interface UnichemFetchOptions extends Omit<RestFetchOptions, "retryOn"> {
 /**
  * Fetch from the UniChem REST API (EBI).
  *
- * Note: every UniChem collection path requires a trailing slash
- * (308 redirect otherwise — verified 2026-04-20). Callers should bake
- * the trailing slash into the path.
+ * The /sources/ collection uses a trailing slash; individual source
+ * records /sources/{id} omit it. The API adapter normalizes these paths.
  */
 export async function unichemFetch(
     path: string,

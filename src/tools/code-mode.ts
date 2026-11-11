@@ -2,6 +2,7 @@ import type { McpServer } from "@bio-mcp/shared/mcp";
 import { createSearchTool } from "@bio-mcp/shared/codemode/search-tool";
 import { createExecuteTool } from "@bio-mcp/shared/codemode/execute-tool";
 import { unichemCatalog } from "../spec/catalog";
+import { unichemResponse } from "../lib/tool-result";
 import { createUnichemApiFetch } from "../lib/api-adapter";
 
 interface CodeModeEnv {
@@ -14,12 +15,20 @@ export function registerCodeMode(
     env: CodeModeEnv,
 ): void {
     const apiFetch = createUnichemApiFetch();
+    const registrar = {tool: (...args: unknown[]) => {
+        const [name, ...rest] = args;
+        // SAFETY: shared factories supply the MCP tool signature; only the name is duplicated.
+        const register = server.tool.bind(server) as (...values: unknown[]) => void;
+        const handler = rest.pop() as (input: unknown, extra: unknown) => Promise<any>;
+        for (const alias of [String(name), `mcp_${String(name)}`]) register(alias, ...rest,
+            (input: unknown, extra: unknown) => unichemResponse(() => handler(input, extra), env, alias, extra, input));
+    }};
 
     const searchTool = createSearchTool({
         prefix: "unichem",
         catalog: unichemCatalog,
     });
-    searchTool.register(server as unknown as { tool: (...args: unknown[]) => void });
+    searchTool.register(registrar);
 
     const executeTool = createExecuteTool({
         prefix: "unichem",
@@ -27,8 +36,12 @@ export function registerCodeMode(
         source: { id: "unichem", name: "UniChem", url: "https://www.ebi.ac.uk/unichem", license: "CC0 1.0" },
         catalog: unichemCatalog,
         apiFetch,
+        maxInlineBytes: 30 * 1024,
+        stagingThreshold: 30 * 1024,
+        preserveApiErrors: true,
+        timeout: 45_000,
         doNamespace: env.UNICHEM_DATA_DO,
         loader: env.CODE_MODE_LOADER,
     });
-    executeTool.register(server as unknown as { tool: (...args: unknown[]) => void });
+    executeTool.register(registrar);
 }
